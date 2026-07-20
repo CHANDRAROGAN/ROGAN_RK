@@ -1,2 +1,2 @@
-# ROGAN3
+# ROGAN_RK
 my new program
