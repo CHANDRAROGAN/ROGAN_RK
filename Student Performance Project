@@ -1,0 +1,183 @@
+
+from pathlib import Path
+import pandas as pd
+import numpy as np
+
+# Dataset location
+DATA_FILE = Path("students.csv")
+
+SUBJECTS = [
+    "maths",
+    "science",
+    "english",
+    "computer_science"
+]
+
+PASS_MARK = 40
+
+
+def load_data():
+    """Load student records from CSV."""
+    if not DATA_FILE.exists():
+        raise FileNotFoundError(
+            "Please create data/students.csv first!"
+        )
+
+    df = pd.read_csv(DATA_FILE)
+
+    required = [
+        "student_id", "name",
+        *SUBJECTS, "attendance"
+    ]
+
+    for column in required:
+        if column not in df.columns:
+            raise ValueError(
+                f"Missing column: {column}"
+            )
+
+    if df["student_id"].duplicated().any():
+        raise ValueError("Duplicate student IDs found!")
+
+    for column in SUBJECTS + ["attendance"]:
+        df[column] = pd.to_numeric(
+            df[column], errors="raise"
+        )
+
+        if not df[column].between(0, 100).all():
+            raise ValueError(
+                f"{column} must be between 0 and 100"
+            )
+
+    return df
+
+
+def analyze_students(df):
+    """Calculate marks, grades and results."""
+    marks = df[SUBJECTS].to_numpy(dtype=float)
+
+    df = df.copy()
+    df["total"] = np.sum(marks, axis=1)
+    df["average"] = np.mean(marks, axis=1).round(2)
+
+    def get_grade(avg):
+        if avg >= 90:
+            return "A+"
+        elif avg >= 80:
+            return "A"
+        elif avg >= 70:
+            return "B"
+        elif avg >= 60:
+            return "C"
+        elif avg >= 50:
+            return "D"
+        elif avg >= PASS_MARK:
+            return "E"
+        return "F"
+
+    df["grade"] = df["average"].apply(get_grade)
+
+    df["result"] = np.where(
+        (marks >= PASS_MARK).all(axis=1),
+        "PASS",
+        "NEEDS SUPPORT"
+    )
+
+    df["rank"] = (
+        df["average"]
+        .rank(method="min", ascending=False)
+        .astype(int)
+    )
+
+    return df
+
+
+def show_students(df):
+    print("\n--- STUDENT PERFORMANCE ---")
+    print(
+        df[[
+            "student_id", "name", "total",
+            "average", "grade", "result", "rank"
+        ]].sort_values("rank").to_string(index=False)
+    )
+
+
+def show_summary(df):
+    print("\n--- CLASS SUMMARY ---")
+    print("Total Students:", len(df))
+    print("Class Average:", round(df["average"].mean(), 2))
+    print("Highest Average:", df["average"].max())
+    print("Lowest Average:", df["average"].min())
+    print(
+        "Students Needing Support:",
+        (df["result"] == "NEEDS SUPPORT").sum()
+    )
+    print(
+        "Average Attendance:",
+        round(df["attendance"].mean(), 2), "%"
+    )
+
+
+def main():
+    try:
+        students = analyze_students(load_data())
+    except (FileNotFoundError, ValueError, OSError) as error:
+        print("Error:", error)
+        return
+
+    while True:
+        print("\n==============================")
+        print(" STUDENT PERFORMANCE ANALYSIS")
+        print("==============================")
+        print("1. View All Students")
+        print("2. Class Summary")
+        print("3. Top 5 Students")
+        print("4. Search Student")
+        print("5. Export Report")
+        print("6. Exit")
+
+        choice = input("Enter your choice: ").strip()
+
+        if choice == "1":
+            show_students(students)
+
+        elif choice == "2":
+            show_summary(students)
+
+        elif choice == "3":
+            print(
+                students.nlargest(5, "average")[
+                    ["student_id", "name", "average", "grade"]
+                ].to_string(index=False)
+            )
+
+        elif choice == "4":
+            sid = input("Enter Student ID: ").strip()
+            match = students[
+                students["student_id"].astype(str).str.lower()
+                == sid.lower()
+            ]
+
+            if match.empty:
+                print("Student not found!")
+            else:
+                print(match.to_string(index=False))
+
+        elif choice == "5":
+            Path("reports").mkdir(exist_ok=True)
+            students.to_csv(
+                "reports/performance_report.csv",
+                index=False
+            )
+            print("Report exported successfully!")
+
+        elif choice == "6":
+            print("Thank you!")
+            break
+
+        else:
+            print("Invalid choice! Try again.")
+
+
+if __name__ == "__main__":
+    main()
